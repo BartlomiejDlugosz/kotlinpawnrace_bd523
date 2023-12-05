@@ -14,8 +14,8 @@ const val HIGHEST_FILE = 'H'
 enum class Piece {
     BLACK, WHITE;
 
-    fun getOpposite(): Piece = if (this == Piece.BLACK) Piece.WHITE else Piece.BLACK
-    override fun toString(): String = if (this == Piece.WHITE) "W" else "B"
+    fun getOpposite(): Piece = if (this == BLACK) WHITE else BLACK
+    override fun toString(): String = if (this == WHITE) "W" else "B"
 
 }
 

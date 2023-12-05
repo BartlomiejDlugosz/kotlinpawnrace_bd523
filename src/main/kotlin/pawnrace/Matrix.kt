@@ -5,8 +5,18 @@ import kotlin.math.pow
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
-class Matrix(val n: Int, val m: Int = n) {
+class Matrix(val n: Int, val m: Int = n, val initList: List<Double>? = null) {
     var matrix: List<MutableList<Double>> = List(n) { MutableList(m) { 0.0 } }
+
+    init {
+        if (initList != null) {
+            require(initList.size == n * m) { "Size of initList must match the matrix dimensions." }
+
+            initList.forEachIndexed { index, value ->
+                matrix[index / m][index % m] = value
+            }
+        }
+    }
 
     override fun toString(): String {
         var str = ""
@@ -42,6 +52,8 @@ class Matrix(val n: Int, val m: Int = n) {
         }
         return result
     }
+
+    fun flatten(): List<Double> = matrix.flatten()
 
     fun applySigmoid(): Matrix {
         this.map(::sigmoid)
