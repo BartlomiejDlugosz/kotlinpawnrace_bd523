@@ -58,8 +58,9 @@ class Game (val board: Board, var player: Player, val moves: Stack<Move> = Stack
     private fun moveDiagonalBy(pos: Position, isLeft: Boolean, piece: Piece, type: MoveType): Move? = TODO()
 
     fun over(): Boolean {
-        if (moves(player.piece).size == 0) return true
-        TODO()
+        if (moves(player.piece).isEmpty()) return true
+        if (board.positionsOf(player.piece.getOpposite()).any{it.rank().nextRank(player.piece.getOpposite()) == null}) return true
+        return false
     }
 
     fun winner(): Player? = TODO()
@@ -72,7 +73,7 @@ class Game (val board: Board, var player: Player, val moves: Stack<Move> = Stack
         return null
     }
 
-    override fun toString(): String = "Player: $player Moves: $moves\n" + board.toString()
+    override fun toString(): String = "Player: $player Moves: $moves\n$board"
 }
 
 fun main() {
@@ -84,14 +85,23 @@ fun main() {
     println(game)
 
     game.applyMove(game.parseMove("C4")!!)
+    println(game.over())
     game.applyMove(game.parseMove("B5")!!)
+    println(game.over())
     game.applyMove(game.parseMove("C5")!!)
+    println(game.over())
     game.applyMove(game.parseMove("D5")!!)
+    println(game.over())
     game.applyMove(game.parseMove("CxD6")!!)
+    println(game.over())
     game.applyMove(game.parseMove("C6")!!)
+    println(game.over())
     game.applyMove(game.parseMove("DxE7")!!)
+    println(game.over())
     game.applyMove(game.parseMove("A6")!!)
+    println(game.over())
     game.applyMove(game.parseMove("E8")!!)
+    println(game.over())
 
 
 
