@@ -1,6 +1,7 @@
 package pawnrace
 
 import java.lang.StringBuilder
+import java.util.*
 
 val startingRanks = hashMapOf<Piece, Rank>(
     Piece.WHITE to Rank.TWO,
@@ -45,7 +46,7 @@ enum class File(val value: Int) {
 enum class Rank(val value: Int) {
     ONE(1), TWO(2), THREE(3), FOUR(4), FIVE(5), SIX(6), SEVEN(7), EIGHT(8);
 
-    fun nextRank(piece: Piece): Rank? {
+    fun nextRank(piece: Piece?): Rank? {
         val newRank = ordinal + (if (piece == Piece.WHITE) 1 else -1)
         if (newRank < entries.size) return entries[newRank]
         return null
@@ -59,20 +60,21 @@ enum class Rank(val value: Int) {
 }
 
 data class Position(val pos: String) {
-    val file: File = File.valueOf(pos[0].toString())
-    val rank: Rank = Rank.fromValue(pos[1].toString().toInt())!!
+    private val file: File = File.valueOf(pos[0].toString())
+    private val rank: Rank = Rank.fromValue(pos[1].toString().toInt())!!
 
-    fun file() = file
-    fun rank() = rank
+    fun file(): File = file
+    fun rank(): Rank = rank
 
-    fun getDiagonals(piece: Piece): List<Position> {
+    fun getDiagonals(piece: Piece?): List<Position> {
         val diagonals = mutableListOf<Position>()
         val nextRank = rank.nextRank(piece)
-        val previousFile = file.previous()
-        val nextFile = file.next()
+        val (previousFile, nextFile) = file.previous() to file.next()
+
         if (nextRank == null) return emptyList()
         if (previousFile != null) diagonals.add(Position("${previousFile}${nextRank}"))
         if (nextFile != null) diagonals.add(Position("${nextFile}${nextRank}"))
+
         return diagonals
     }
 
@@ -83,13 +85,13 @@ class Move(val piece: Piece, val from: Position, val to: Position, val type: Mov
     override fun toString(): String = if (type == MoveType.PEACEFUL) "$to" else "${from.file()}x$to"
 }
 
-class Board(val whiteGap: File, val blackGap: File) {
-    val board: HashMap<File, HashMap<Rank, Piece>> = hashMapOf()
+class Board(private val whiteGap: File, private val blackGap: File) {
+    private val board: EnumMap<File, EnumMap<Rank, Piece>> = EnumMap(File::class.java)
 
     init {
         for (i in 1..8) {
             val currentFile = File.fromValue(i)!!
-            val fileList = board.getOrPut(currentFile) { hashMapOf() }
+            val fileList = board.getOrPut(currentFile) { EnumMap(Rank::class.java) }
             if (currentFile != whiteGap) fileList[startingRanks[Piece.WHITE]!!] = Piece.WHITE
             if (currentFile != blackGap) fileList[startingRanks[Piece.BLACK]!!] = Piece.BLACK
         }
@@ -98,38 +100,71 @@ class Board(val whiteGap: File, val blackGap: File) {
     fun pieceAt(pos: Position): Piece? = board[pos.file()]?.get(pos.rank())
 
     fun positionsOf(piece: Piece): List<Position> {
-        val list: MutableList<Position> = mutableListOf()
+        val positions: MutableList<Position> = mutableListOf()
         for ((file, ranks) in board) {
-            list.addAll(ranks.filter { it.value == piece }.map { (rank, _) -> Position("${file}${rank}") })
+            positions.addAll(ranks.filter { it.value == piece }.map { (rank, _) -> Position("${file}${rank}") })
         }
-        return list
+        return positions
     }
 
-    fun isValidMove(move: Move, lastMove: Move? = null): Boolean {
-        // Peaceful moves
-        if (move.type == MoveType.PEACEFUL) {
-            // Check if simple 1 or 2 move forward
-            if (move.from.file() == move.to.file() && pieceAt(move.to) == null && pieceAt(move.from) == move.piece &&
-                ((move.from.rank().nextRank(move.piece) == move.to.rank()) ||
-                        (move.from.rank() == startingRanks[move.piece] && move.from.rank().nextRank(move.piece)
-                            ?.nextRank(move.piece) == move.to.rank())
-                        )
-            ) return true
-        } else if (move.type == MoveType.CAPTURE) {
-            if (move.from.getDiagonals(move.piece)
-                    .contains(move.to) && pieceAt(move.to) == move.piece.getOpposite()
-            ) return true
+    fun validMoves(pos: Position, lastMove: Move? = null): List<Pair<Position, MoveType>> {
+        val moves = mutableListOf<Pair<Position, MoveType>>()
+        val piece = pieceAt(pos) ?: return emptyList()
+        val rank = pos.rank()
+        val file = pos.file()
+
+        // 1 move forward
+        val nextRank = rank.nextRank(piece)
+        val nextPosition = Position("${file}${nextRank}")
+        if (pieceAt(nextPosition) == null) {
+            if (nextRank != null) moves.add(nextPosition to MoveType.PEACEFUL)
+
+            // 2 moves forward
+
+            if (rank == startingRanks[piece]) {
+                val nextNextPosition = Position("$file${nextRank?.nextRank(piece)}")
+                if (pieceAt(nextNextPosition) == null) moves.add(nextNextPosition to MoveType.PEACEFUL)
+            }
+        }
+
+
+
+        // Capture
+        val diagonals = pos.getDiagonals(piece)
+        for (position in diagonals) {
+            if (pieceAt(position) == piece.getOpposite()) moves.add(Position("$position") to MoveType.CAPTURE)
+        }
+
+        // En-passant
+        if (lastMove != null) {
+            if (lastMove.from.rank() == startingRanks[lastMove.piece] &&
+                pos.rank() == lastMove.to.rank() &&
+                (pos.file().previous() == lastMove.to.file() || pos.file().next() == lastMove.to.file())
+            )
+                moves.add(Position("${lastMove.to.file()}${lastMove.from.rank().nextRank(lastMove.piece)}") to MoveType.EN_PASSANT)
+        }
+
+        return moves
+    }
+
+    fun isValidMove(move: Move, lastMove: Move? = null): Boolean = validMoves(move.from, lastMove).map{it.first}.contains(move.to)
+
+    fun move(m: Move, lastMove: Move? = null): Board {
+        isValidMove(m, lastMove)
+        if (m.type == MoveType.PEACEFUL || m.type == MoveType.CAPTURE) {
+            board[m.to.file()]!![m.to.rank()] = m.piece
+            board[m.from.file()]!!.remove(m.from.rank())
         } else {
-            TODO()
+            board[m.to.file()]!![m.to.rank()] = m.piece
+            board[m.to.file()]!![m.to.rank().nextRank(m.piece.getOpposite())] = null
+            board[m.from.file()]!!.remove(m.from.rank())
         }
-        return false
-    }
-
-    fun move(m: Move): Board {
-        board[m.to.file()]!![m.to.rank()] = m.piece
-        board[m.from.file()]!!.remove(m.from.rank())
         return this
     }
+
+    fun add(pos: Position, piece: Piece) = board[pos.file()]?.set(pos.rank(), piece)
+
+    fun getBoard() = board
 
     override fun toString(): String {
         val str = StringBuilder()
@@ -163,10 +198,14 @@ fun main() {
     println(a)
 //    println(a.isValidMove(Move(Piece.WHITE, Position("A5"), Position("A6"), MoveType.PEACEFUL)))
     println(a.move(Move(Piece.WHITE, Position("A2"), Position("A4"), MoveType.PEACEFUL)))
+    println(a.move(Move(Piece.BLACK, Position("B7"), Position("B5"), MoveType.PEACEFUL)))
+    println(a.move(Move(Piece.WHITE, Position("C2"), Position("C5"), MoveType.PEACEFUL)))
+    println(a.move(Move(Piece.BLACK, Position("D7"), Position("D5"), MoveType.PEACEFUL)))
+    println(a.validMoves(Position("C5"), Move(Piece.WHITE, Position("A4"), Position("A5"), MoveType.PEACEFUL)))
 //    println(a.move(Move(Piece.BLACK, Position("B7"), Position("B5"), MoveType.PEACEFUL)))
 //    println(a.move(Move(Piece.WHITE, Position("B2"), Position("B3"), MoveType.PEACEFUL)))
 //    println(a.move(Move(Piece.BLACK, Position("B5"), Position("A4"), MoveType.CAPTURE)))
 //    println(a.move(Move(Piece.WHITE, Position("B3"), Position("A4"), MoveType.CAPTURE)))
 //    println(a.positionsOf(Piece.WHITE))
-    println(Rank.fromValue(2)?.nextRank(Piece.WHITE))
+//    println(Rank.fromValue(2)?.nextRank(Piece.WHITE))
 }
